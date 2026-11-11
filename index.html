@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Vienna: growth of the city</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<style>
+html,body{height:100%;margin:0}body{display:flex}
+#panel{width:380px;flex:none;overflow-y:auto;background:#fffaf0;color:#2a2118;font:16px/1.55 Georgia,serif;padding:24px 22px;box-sizing:border-box}
+#panel h1{font-size:24px;line-height:1.2;margin:0 0 6px}#panel .lead{color:#6b5d4d;margin:0 0 40vh}
+.step{min-height:70vh;padding:16px 18px;margin-bottom:20px;border-left:4px solid #d8cbb4;opacity:.4;transition:.4s}
+.step.act{opacity:1;border-left-color:#b3341f}.step small{font:600 13px system-ui,sans-serif;color:#b3341f}
+.step h2{margin:2px 0 8px;font-size:21px}
+.note{font:12px/1.4 system-ui,sans-serif;color:#6b5d4d;padding-bottom:40vh}
+#map{flex:1;height:100%}
+.leaflet-interactive{transition:fill-opacity .6s,stroke-opacity .6s}
+.legend{background:#fff;padding:8px 10px;font:13px/1.5 system-ui,sans-serif;border-radius:6px;box-shadow:0 1px 5px #0004;max-height:60vh;overflow:auto}
+.legend i{display:inline-block;width:14px;height:14px;margin-right:6px;vertical-align:-2px;border:1px solid #333}
+.leaflet-popup-content td{padding:1px 6px 1px 0;font:12px system-ui}
+#ctl{position:absolute;left:50%;bottom:28px;transform:translateX(-50%);z-index:1000;background:#fff;padding:8px 14px;border-radius:8px;box-shadow:0 1px 6px #0005;font:13px system-ui,sans-serif;display:flex;align-items:center;gap:10px;width:min(460px,70%)}
+#ctl input{flex:1}#ctl button{cursor:pointer;font-size:16px;border:1px solid #bbb;border-radius:6px;background:#fff;padding:2px 9px}
+#yr{font-weight:700;font-size:18px;min-width:3.2em;text-align:right}
+@media(max-width:800px){body{flex-direction:column}#panel{width:auto;height:38vh}#map{height:62vh;flex:none}.step{min-height:50vh}}
+</style></head>
+<body>
+<div id="panel"><h1>How Vienna grew</h1><p class="lead">Scroll to step through the city’s growth. Each district appears when it joined Vienna; drag the slider, or switch on extra layers (fortifications, building periods, rivers, roads) in the layer control.</p><div id="steps"></div>
+<p class="note">Dates are simplified; verify against the Wien Geschichte Wiki. Districts are today’s boundaries. Data: City of Vienna (CC-BY 4.0), © OpenStreetMap contributors (ODbL).</p></div>
+<div id="map"><div id="ctl"><button id="play" title="Play / pause">▶</button><input id="sl" type="range"><span id="yr"></span></div></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.22/leaflet-maplibre-gl.js"></script>
+<script src="data/districts.js"></script><script src="data/fort.js"></script><script src="data/medw.js"></script><script src="data/medf.js"></script><script src="data/roman.js"></script><script src="data/water.js"></script><script src="data/roads.js"></script><script src="data/ubahn.js"></script>
+<script>
+var CFG = {"eras": [["core", "Medieval core / Ringstraße", "#8c2d19", 0], ["e1850", "Inner suburbs, 1850", "#d98c3f", 1850], ["e1892", "Outer suburbs, 1892", "#e6c36a", 1892], ["e1900", "Brigittenau, split 1900", "#9bb383", 1900], ["e1904", "Floridsdorf, 1904", "#6fa3b5", 1904], ["e1938", "Greater Vienna, 1938/1954", "#a89bc4", 1938]], "overlays": [{"id": "fort", "label": "Fortifications 16th–19th c.", "style": {"color": "#5a2d0c", "weight": 3, "fillOpacity": 0.35}, "on": true, "var": "json_fort"}, {"id": "medw", "label": "Medieval settlement wall", "style": {"color": "#7a4a1d", "weight": 2, "dashArray": "4 3"}, "on": false, "var": "json_medw"}, {"id": "medf", "label": "Medieval fortification", "style": {"color": "#7a4a1d", "weight": 2, "fillOpacity": 0.3}, "on": false, "var": "json_medf"}, {"id": "roman", "label": "Roman legion-camp roads", "style": {"color": "#a3262a", "weight": 3}, "on": false, "var": "json_roman"}, {"id": "water", "label": "Rivers & canals", "style": {"color": "#2a7fbf", "weight": 3.5}, "on": true, "var": "json_water"}, {"id": "roads", "label": "Main roads (OSM)", "style": {"color": "#c2410c", "weight": 2}, "on": true, "var": "json_roads"}, {"id": "ubahn", "label": "U-Bahn", "style": {"color": "#7c3aed", "weight": 2.5}, "on": false, "var": "json_ubahn"}], "legends": [], "story": [{"year": 1840, "title": "The walled city", "text": "Before 1850 the historic core, today's 1st district, is the city proper. Suburbs lie outside the walls and the Linienwall, and are still separate communities."}, {"year": 1850, "title": "Suburbs join the city", "text": "In 1850 the suburbs inside the Linienwall are incorporated, forming today's districts 2 to 9. Around then the fortifications give way to the Ringstraße."}, {"year": 1892, "title": "The outer ring", "text": "In 1892 the communities beyond the Linienwall join, creating districts 10 to 19. The Gürtel road later follows the old customs line."}, {"year": 1900, "title": "A new district", "text": "Brigittenau is split off from Leopoldstadt in 1900 and becomes the 20th district."}, {"year": 1904, "title": "Across the Danube", "text": "Floridsdorf, north of the regulated Danube, is incorporated in 1904 as the 21st district."}, {"year": 1938, "title": "Greater Vienna", "text": "The 1938 expansion absorbs dozens of surrounding communities. Boundary changes in 1954 leave the city with today's districts 22 and 23 and its present limits."}], "min": 1840, "max": 1960, "start": 1840};
+var map = L.map('map').setView([48.21, 16.37], 11);
+map.createPane('choro').style.zIndex = 405;
+map.createPane('lines').style.zIndex = 450;
+var vt = L.maplibreGL({style:'https://tiles.versatiles.org/assets/styles/colorful/style.json',
+  attribution:'&copy; OpenStreetMap contributors, VersaTiles'}).addTo(map);
+var ne = L.tileLayer('https://tiles.openfreemap.org/natural_earth/ne2sr/{z}/{x}/{y}.png',{attribution:'Natural Earth',maxNativeZoom:6,maxZoom:18});
+var osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap contributors'});
+var overlays = {}, layers = [], year = CFG.start;
+
+function popup(f, layer){
+  var rows = Object.keys(f.properties).filter(function(k){return k[0] !== '_'}).map(function(k){
+    return '<tr><td><b>'+k+'</b></td><td>'+f.properties[k]+'</td></tr>'});
+  layer.bindPopup('<table>'+rows.join('')+'</table>');
+}
+function hover(f, layer){ popup(f, layer);
+  layer.on({mouseover:function(e){e.target.setStyle({weight:3})}, mouseout:function(e){e.target.setStyle({weight:1})}}); }
+function sty(e, y){ var on = y >= e[3];
+  return {color:'#333', weight:1, opacity:on?1:0, fillColor:e[2], fillOpacity:on?.75:0}; }
+
+CFG.eras.forEach(function(e){
+  var g = L.geoJSON(json_districts, {filter:function(f){return f.properties._era === e[0]},
+    style:sty(e, year), onEachFeature:hover}).addTo(map);
+  layers.push({e:e, g:g});
+  overlays['<i style="background:'+e[2]+';display:inline-block;width:12px;height:12px;border:1px solid #333"></i> '+e[1]] = g;
+});
+CFG.overlays.forEach(function(o){
+  var s = o.style, opts = {onEachFeature:popup};
+  if (s.kind === 'choro'){
+    opts.pane = 'choro';
+    opts.style = function(f){ return {fillColor:s.colors[String(f.properties[s.field])]||'#ccc', color:'#555', weight:.3, fillOpacity:.75}; };
+  } else { opts.pane = 'lines'; opts.style = s; }
+  var g = L.geoJSON(window[o.var], opts);
+  if (o.on) g.addTo(map);
+  overlays[o.label] = g;
+});
+L.control.layers({'VersaTiles':vt,'Natural Earth':ne,'OpenStreetMap':osm}, overlays, {collapsed:true}).addTo(map);
+L.control.scale({imperial:false}).addTo(map);
+var lg = L.control({position:'bottomright'});
+lg.onAdd = function(){ var d = L.DomUtil.create('div','legend');
+  var h = '<b>When districts joined Vienna</b><br>' + CFG.eras.map(function(e){
+    return '<i style="background:'+e[2]+'"></i>'+e[1]}).join('<br>');
+  CFG.legends.forEach(function(l){ h += '<br><b>'+l[0]+'</b><br>' + Object.keys(l[1]).map(function(k){
+    return '<i style="background:'+l[1][k]+'"></i>'+k}).join('<br>'); });
+  d.innerHTML = h; return d; };
+lg.addTo(map);
+
+var sl = document.getElementById('sl'), yrEl = document.getElementById('yr'), playBtn = document.getElementById('play');
+sl.min = CFG.min; sl.max = CFG.max; sl.step = 1;
+L.DomEvent.disableClickPropagation(document.getElementById('ctl'));
+function setYear(y, fit){
+  year = y; sl.value = y; yrEl.textContent = y;
+  layers.forEach(function(l){
+    var on = y >= l.e[3]; l.g.setStyle(sty(l.e, y));
+    l.g.eachLayer(function(p){ if (p._path) p._path.style.pointerEvents = on ? 'auto' : 'none'; });
+  });
+  if (fit){
+    var vis = layers.filter(function(l){return y >= l.e[3] && map.hasLayer(l.g)}).map(function(l){return l.g});
+    if (vis.length) map.flyToBounds(L.featureGroup(vis).getBounds(), {padding:[40,40], duration:1});
+  }
+}
+var timer = null;
+function stop(){ if (timer){ clearInterval(timer); timer = null; } playBtn.textContent = '▶'; }
+playBtn.onclick = function(){
+  if (timer) return stop();
+  if (year >= CFG.max) setYear(CFG.min);
+  playBtn.textContent = '❚❚';
+  timer = setInterval(function(){ if (year >= CFG.max) return stop(); setYear(year + 1); }, 70);
+};
+sl.oninput = function(){ stop(); setYear(+sl.value); };
+
+var stepsEl = document.getElementById('steps');
+CFG.story.forEach(function(s){
+  var d = document.createElement('section'); d.className = 'step'; d.dataset.y = s.year;
+  d.innerHTML = '<small>'+s.year+'</small><h2>'+s.title+'</h2><p>'+s.text+'</p>'; stepsEl.appendChild(d);
+});
+var steps = [].slice.call(document.querySelectorAll('.step'));
+var io = new IntersectionObserver(function(es){
+  es.forEach(function(en){ if (en.isIntersecting){
+    steps.forEach(function(s){ s.classList.toggle('act', s === en.target) });
+    stop(); setYear(+en.target.dataset.y, true);
+  }});
+}, {root: document.getElementById('panel'), rootMargin: '-35% 0px -45% 0px'});
+steps.forEach(function(s){ io.observe(s) });
+map.fitBounds(L.geoJSON(json_districts).getBounds());
+setYear(CFG.start);
+</script></body></html>
